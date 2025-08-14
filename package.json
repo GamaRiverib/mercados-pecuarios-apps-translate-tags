@@ -1,0 +1,24 @@
+{
+  "name": "@mercados-pecuarios/translate-tags",
+  "version": "0.1.0",
+  "description": "Script de traducción de Tags utilizando modelo de lenguaje grande (LLM)",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "translate": "node index.js",
+    "poc": "node index.js",
+    "test-connection": "node -e \"require('./geminiTranslator').testGeminiConnection().then(ok => process.exit(ok ? 0 : 1))\"",
+    "validate": "node -e \"require('./index').validatePrerequisites().then(ok => process.exit(ok ? 0 : 1))\"",
+    "info": "node -e \"require('./index').showProjectInfo()\"",
+    "help": "node index.js --help",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@google/genai": "^1.14.0",
+    "dotenv": "^17.2.1",
+    "p-limit": "^6.2.0"
+  }
+}
