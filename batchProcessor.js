@@ -13,16 +13,89 @@ const DEFAULT_CONFIG = {
   maxRetries: 3, // Número máximo de reintentos por lote fallido
   retryDelay: 2000, // Delay base en ms entre reintentos (con backoff exponencial)
   outputFile: "output.json", // Archivo de salida por defecto
+  skipTranslated: true, // Si debe omitir entradas ya traducidas
 };
 
 /**
+ * Verifica si un valor está vacío o necesita traducción
+ * @param {any} value - Valor a verificar
+ * @returns {boolean} - true si el valor necesita traducción
+ */
+function needsTranslation(value) {
+  // Considerar como "necesita traducción" si el valor es:
+  // - null, undefined, vacío, o solo espacios en blanco
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    (typeof value === "string" && value.trim() === "")
+  );
+}
+
+/**
+ * Filtra las entradas que necesitan traducción
+ * @param {Object} jsonData - Datos JSON originales
+ * @param {boolean} skipTranslated - Si debe omitir entradas ya traducidas
+ * @returns {Object} - Objeto con entradas filtradas, estadísticas y orden original
+ */
+function filterEntriesForTranslation(jsonData, skipTranslated = true) {
+  console.log(`🔍 Analizando entradas para determinar cuáles necesitan traducción...`);
+
+  const allEntries = Object.entries(jsonData);
+  const toTranslate = {};
+  const alreadyTranslated = {};
+  const originalKeys = Object.keys(jsonData); // Preservar orden original
+  const skippedCount = 0;
+
+  allEntries.forEach(([key, value]) => {
+    if (skipTranslated && !needsTranslation(value)) {
+      // Esta entrada ya está traducida, la guardamos para el resultado final
+      alreadyTranslated[key] = value;
+    } else {
+      // Esta entrada necesita traducción
+      toTranslate[key] = value;
+    }
+  });
+
+  const stats = {
+    total: allEntries.length,
+    needsTranslation: Object.keys(toTranslate).length,
+    alreadyTranslated: Object.keys(alreadyTranslated).length,
+    skippedDueToTranslation: Object.keys(alreadyTranslated).length,
+  };
+
+  console.log(`📊 Análisis completado:`);
+  console.log(`   📝 Total de entradas: ${stats.total}`);
+  console.log(`   🔄 Necesitan traducción: ${stats.needsTranslation}`);
+  console.log(`   ✅ Ya traducidas (se omitirán): ${stats.alreadyTranslated}`);
+
+  if (stats.needsTranslation === 0) {
+    console.log(`🎉 ¡Todas las entradas ya están traducidas! No hay nada que procesar.`);
+  }
+
+  return {
+    toTranslate,
+    alreadyTranslated,
+    originalKeys, // Incluir el orden original
+    stats,
+  };
+}
+
+/**
  * Divide un objeto JSON en lotes más pequeños
- * @param {Object} jsonData - Datos JSON a dividir
+ * @param {Object} jsonData - Datos JSON a dividir (solo las que necesitan traducción)
  * @param {number} batchSize - Tamaño de cada lote
  * @returns {Array<Object>} - Array de objetos, cada uno es un lote
  */
 function createBatches(jsonData, batchSize) {
-  console.log(`🔪 Dividiendo datos en lotes de tamaño ${batchSize}...`);
+  const entriesCount = Object.keys(jsonData).length;
+  
+  if (entriesCount === 0) {
+    console.log(`ℹ️  No hay entradas para procesar en lotes.`);
+    return [];
+  }
+
+  console.log(`🔪 Dividiendo ${entriesCount} entradas en lotes de tamaño ${batchSize}...`);
 
   const entries = Object.entries(jsonData);
   const batches = [];
@@ -101,8 +174,13 @@ async function processBatchWithRetry(batch, maxRetries, retryDelay) {
 async function processBatchesConcurrently(batches, config) {
   const { concurrencyLimit, maxRetries, retryDelay } = config;
 
+  if (batches.length === 0) {
+    console.log(`ℹ️  No hay lotes para procesar.`);
+    return { successful: [], failed: [] };
+  }
+
   console.log(
-    `🚀 Iniciando procesamiento concurrente con límite de ${concurrencyLimit} lotes simultáneos`
+    `🚀 Iniciando procesamiento concurrente de ${batches.length} lotes con límite de ${concurrencyLimit} lotes simultáneos`
   );
 
   // Crear limitador de concurrencia
@@ -147,6 +225,11 @@ async function processBatchesConcurrently(batches, config) {
  * @returns {Object} - Objeto JSON final ensamblado
  */
 function assembleResults(successfulResults) {
+  if (successfulResults.length === 0) {
+    console.log(`ℹ️  No hay resultados exitosos para ensamblar.`);
+    return {};
+  }
+
   console.log(`🔧 Ensamblando ${successfulResults.length} lotes exitosos...`);
 
   const finalResult = {};
@@ -159,23 +242,61 @@ function assembleResults(successfulResults) {
   });
 
   const totalEntries = Object.keys(finalResult).length;
-  console.log(`✅ Resultado final ensamblado: ${totalEntries} entradas`);
+  console.log(`✅ Resultado final ensamblado: ${totalEntries} entradas traducidas`);
 
   return finalResult;
+}
+
+/**
+ * Combina las traducciones nuevas con las entradas ya traducidas manteniendo el orden original
+ * @param {Object} newTranslations - Nuevas traducciones
+ * @param {Object} alreadyTranslated - Entradas que ya estaban traducidas
+ * @param {Array<string>} originalKeys - Orden original de las claves
+ * @returns {Object} - Resultado final combinado en orden original
+ */
+function combineResults(newTranslations, alreadyTranslated, originalKeys) {
+  console.log(`🔗 Combinando resultados finales manteniendo orden original...`);
+  
+  // Crear objeto resultado manteniendo el orden original
+  const combinedResult = {};
+  const allTranslations = { ...alreadyTranslated, ...newTranslations };
+  
+  // Reconstruir el objeto en el orden original
+  originalKeys.forEach(key => {
+    if (allTranslations.hasOwnProperty(key)) {
+      combinedResult[key] = allTranslations[key];
+    }
+  });
+
+  const stats = {
+    alreadyTranslated: Object.keys(alreadyTranslated).length,
+    newTranslations: Object.keys(newTranslations).length,
+    total: Object.keys(combinedResult).length,
+  };
+
+  console.log(`📊 Combinación completada:`);
+  console.log(`   ✅ Ya traducidas: ${stats.alreadyTranslated}`);
+  console.log(`   🆕 Nuevas traducciones: ${stats.newTranslations}`);
+  console.log(`   📝 Total en resultado final: ${stats.total}`);
+  console.log(`   🔄 Orden original preservado: ${originalKeys.length} claves`);
+
+  return { result: combinedResult, stats };
 }
 
 /**
  * Genera un reporte detallado del procesamiento
  * @param {Object} processingResults - Resultados del procesamiento
  * @param {number} totalBatches - Número total de lotes
- * @param {number} totalEntries - Número total de entradas
+ * @param {Object} filterStats - Estadísticas del filtrado
+ * @param {Object} combineStats - Estadísticas de la combinación
  * @param {number} startTime - Timestamp de inicio
  * @returns {Object} - Reporte detallado
  */
 function generateReport(
   processingResults,
   totalBatches,
-  totalEntries,
+  filterStats,
+  combineStats,
   startTime
 ) {
   const endTime = Date.now();
@@ -190,28 +311,36 @@ function generateReport(
 
   const report = {
     summary: {
+      totalOriginalEntries: filterStats.total,
+      entriesAlreadyTranslated: filterStats.alreadyTranslated,
+      entriesNeedingTranslation: filterStats.needsTranslation,
       totalBatches,
-      totalEntries,
       successfulBatches: successful.length,
       failedBatches: failed.length,
-      successfulEntries,
-      failedEntries: totalEntries - successfulEntries,
-      successRate: ((successful.length / totalBatches) * 100).toFixed(2) + "%",
-      entriesSuccessRate:
-        ((successfulEntries / totalEntries) * 100).toFixed(2) + "%",
+      successfulNewTranslations: successfulEntries,
+      failedTranslations: filterStats.needsTranslation - successfulEntries,
+      finalResultEntries: combineStats.total,
+      batchSuccessRate: totalBatches > 0 ? ((successful.length / totalBatches) * 100).toFixed(2) + "%" : "N/A",
+      translationSuccessRate: filterStats.needsTranslation > 0 ? 
+        ((successfulEntries / filterStats.needsTranslation) * 100).toFixed(2) + "%" : "N/A",
+      overallCompletionRate: ((combineStats.total / filterStats.total) * 100).toFixed(2) + "%",
       durationMs: duration,
       durationFormatted: formatDuration(duration),
     },
-    successful: successful.map((s) => ({
-      batchId: s.batchId,
-      entriesCount: Object.keys(s.data).length,
-      attempts: s.attempts,
-    })),
-    failed: failed.map((f) => ({
-      batchId: f.batchId,
-      error: f.error,
-      attempts: f.attempts,
-    })),
+    filtering: filterStats,
+    processing: {
+      successful: successful.map((s) => ({
+        batchId: s.batchId,
+        entriesCount: Object.keys(s.data).length,
+        attempts: s.attempts,
+      })),
+      failed: failed.map((f) => ({
+        batchId: f.batchId,
+        error: f.error,
+        attempts: f.attempts,
+      })),
+    },
+    combining: combineStats,
   };
 
   return report;
@@ -254,7 +383,6 @@ async function processTranslation(inputFile, config = {}) {
 
     // 1. Leer archivo de entrada
     const inputData = await readJsonFile(inputFile);
-    const totalEntries = Object.keys(inputData).length;
 
     // 2. Mostrar información del archivo
     const fileInfo = await getFileInfo(inputFile);
@@ -262,45 +390,57 @@ async function processTranslation(inputFile, config = {}) {
       `📊 Información del archivo: ${fileInfo.entriesCount} entradas, ${fileInfo.sizeFormatted}`
     );
 
-    // 3. Crear lotes
-    const batches = createBatches(inputData, finalConfig.batchSize);
+    // 3. Filtrar entradas que necesitan traducción
+    const { toTranslate, alreadyTranslated, originalKeys, stats: filterStats } = 
+      filterEntriesForTranslation(inputData, finalConfig.skipTranslated);
 
-    // 4. Procesar lotes concurrentemente
+    // 4. Crear lotes solo con las entradas que necesitan traducción
+    const batches = createBatches(toTranslate, finalConfig.batchSize);
+
+    // 5. Procesar lotes concurrentemente (solo si hay lotes)
     const processingResults = await processBatchesConcurrently(
       batches,
       finalConfig
     );
 
-    // 5. Ensamblar resultados exitosos
-    const finalResult = assembleResults(processingResults.successful);
+    // 6. Ensamblar resultados exitosos
+    const newTranslations = assembleResults(processingResults.successful);
 
-    // 6. Guardar archivo de salida
+    // 7. Combinar nuevas traducciones con las ya existentes manteniendo orden original
+    const { result: finalResult, stats: combineStats } = 
+      combineResults(newTranslations, alreadyTranslated, originalKeys);
+
+    // 8. Guardar archivo de salida
     if (Object.keys(finalResult).length > 0) {
       await writeJsonFile(finalConfig.outputFile, finalResult);
+    } else {
+      console.log(`⚠️  No hay datos para guardar en el archivo de salida.`);
     }
 
-    // 7. Generar reporte
+    // 9. Generar reporte
     const report = generateReport(
       processingResults,
       batches.length,
-      totalEntries,
+      filterStats,
+      combineStats,
       startTime
     );
 
-    // 8. Mostrar resumen
+    // 10. Mostrar resumen
     console.log("\n📋 === RESUMEN DEL PROCESAMIENTO ===");
-    console.log(
-      `✅ Lotes exitosos: ${report.summary.successfulBatches}/${report.summary.totalBatches}`
-    );
-    console.log(
-      `✅ Entradas traducidas: ${report.summary.successfulEntries}/${report.summary.totalEntries}`
-    );
-    console.log(`📈 Tasa de éxito: ${report.summary.successRate}`);
+    console.log(`📝 Entradas originales: ${report.summary.totalOriginalEntries}`);
+    console.log(`✅ Ya traducidas (omitidas): ${report.summary.entriesAlreadyTranslated}`);
+    console.log(`🔄 Necesitaban traducción: ${report.summary.entriesNeedingTranslation}`);
+    console.log(`✅ Nuevas traducciones exitosas: ${report.summary.successfulNewTranslations}`);
+    console.log(`❌ Traducciones fallidas: ${report.summary.failedTranslations}`);
+    console.log(`📄 Total en archivo final: ${report.summary.finalResultEntries}`);
+    console.log(`📈 Tasa de éxito en traducción: ${report.summary.translationSuccessRate}`);
+    console.log(`📈 Completitud total: ${report.summary.overallCompletionRate}`);
     console.log(`⏱️  Duración total: ${report.summary.durationFormatted}`);
 
     if (report.summary.failedBatches > 0) {
       console.log("\n❌ LOTES FALLIDOS:");
-      report.failed.forEach((f) => {
+      report.processing.failed.forEach((f) => {
         console.log(`   Lote ${f.batchId}: ${f.error}`);
       });
     }
@@ -316,10 +456,13 @@ async function processTranslation(inputFile, config = {}) {
 
 module.exports = {
   processTranslation,
+  filterEntriesForTranslation,
+  needsTranslation,
   createBatches,
   processBatchWithRetry,
   processBatchesConcurrently,
   assembleResults,
+  combineResults,
   generateReport,
   DEFAULT_CONFIG,
 };
