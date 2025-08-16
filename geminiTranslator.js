@@ -8,7 +8,7 @@ const path = require("path");
  * Configuración por defecto para la API de Gemini
  */
 const DEFAULT_GEMINI_CONFIG = {
-  model: "gemini-1.5-flash",
+  model: "gemini-2.0-flash-lite",
   temperature: 0.1, // Baja temperatura para traducciones más consistentes
   maxOutputTokens: 8192,
   topK: 1,

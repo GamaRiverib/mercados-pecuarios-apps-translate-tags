@@ -127,7 +127,7 @@ const PROJECT_CONFIG = {
   retryDelay: 2000,
   enableKeyFiltering: true, // Habilitar filtrado inteligente
   tier: "free_tier", // Tier por defecto
-  model: "gemini-1.5-flash", // Modelo por defecto
+  model: "gemini-2.0-flash-lite", // Modelo por defecto
   respectRateLimits: true, // Respetar límites de velocidad por defecto
 };
 

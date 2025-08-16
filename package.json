@@ -14,6 +14,8 @@
     "test-filter": "node dryRun.js --samples --verbose",
     "test-rate-limits": "node test-rate-limits.js",
     "test-rate-limits-tier1": "node test-rate-limits.js --tier=tier_1 --requests=25",
+    "consolidate": "node consolidate.js",
+    "consolidate-help": "node consolidate.js --help",
     "test-connection": "node -e \"require('./geminiTranslator').testGeminiConnection().then(ok => process.exit(ok ? 0 : 1))\"",
     "validate": "node -e \"require('./index').validatePrerequisites().then(ok => process.exit(ok ? 0 : 1))\"",
     "info": "node -e \"require('./index').showProjectInfo()\"",
