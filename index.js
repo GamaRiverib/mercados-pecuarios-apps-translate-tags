@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
 const path = require("path");
-const { processTranslation, DEFAULT_CONFIG, getRateLimiterStatus } = require("./batchProcessor");
+const {
+  processTranslation,
+  DEFAULT_CONFIG,
+  getRateLimiterStatus,
+} = require("./batchProcessor");
 const { testGeminiConnection, getModelInfo } = require("./geminiTranslator");
 const { getFileInfo, fileExists } = require("./fileHandler");
 
@@ -12,52 +16,52 @@ const { getFileInfo, fileExists } = require("./fileHandler");
 function parseCommandLineArgs() {
   const args = process.argv.slice(2);
   const config = {};
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const nextArg = args[i + 1];
-    
+
     switch (arg) {
-      case '--tier':
-        if (nextArg && !nextArg.startsWith('--')) {
+      case "--tier":
+        if (nextArg && !nextArg.startsWith("--")) {
           config.tier = nextArg;
           i++; // Skip next argument
         }
         break;
-      case '--model':
-        if (nextArg && !nextArg.startsWith('--')) {
+      case "--model":
+        if (nextArg && !nextArg.startsWith("--")) {
           config.model = nextArg;
           i++; // Skip next argument
         }
         break;
-      case '--input':
-        if (nextArg && !nextArg.startsWith('--')) {
+      case "--input":
+        if (nextArg && !nextArg.startsWith("--")) {
           config.inputFile = nextArg;
           i++; // Skip next argument
         }
         break;
-      case '--output':
-        if (nextArg && !nextArg.startsWith('--')) {
+      case "--output":
+        if (nextArg && !nextArg.startsWith("--")) {
           config.outputFile = nextArg;
           i++; // Skip next argument
         }
         break;
-      case '--batch-size':
-        if (nextArg && !nextArg.startsWith('--')) {
+      case "--batch-size":
+        if (nextArg && !nextArg.startsWith("--")) {
           config.batchSize = parseInt(nextArg);
           i++; // Skip next argument
         }
         break;
-      case '--no-rate-limits':
+      case "--no-rate-limits":
         config.respectRateLimits = false;
         break;
-      case '--help':
+      case "--help":
         showHelp();
         process.exit(0);
         break;
     }
   }
-  
+
   return config;
 }
 
@@ -66,18 +70,24 @@ function parseCommandLineArgs() {
  */
 function showHelp() {
   console.log("🎯 SISTEMA DE TRADUCCIÓN MASIVA");
-  console.log("📝 Traduce archivos JSON grandes del inglés al español usando Gemini AI\n");
-  
+  console.log(
+    "📝 Traduce archivos JSON grandes del inglés al español usando Gemini AI\n"
+  );
+
   console.log("USO:");
   console.log("  node index.js [opciones]\n");
-  
+
   console.log("OPCIONES:");
   console.log("  --tier <tier>          Tier de la API de Gemini");
-  console.log("                         Valores: free_tier, tier_1, tier_2, tier_3");
+  console.log(
+    "                         Valores: free_tier, tier_1, tier_2, tier_3"
+  );
   console.log("                         Por defecto: free_tier");
   console.log("");
   console.log("  --model <modelo>       Modelo de Gemini a usar");
-  console.log("                         Valores: gemini-1.5-flash, gemini-2.0-flash, etc.");
+  console.log(
+    "                         Valores: gemini-1.5-flash, gemini-2.0-flash, etc."
+  );
   console.log("                         Por defecto: gemini-1.5-flash");
   console.log("");
   console.log("  --input <archivo>      Archivo JSON de entrada");
@@ -89,19 +99,21 @@ function showHelp() {
   console.log("  --batch-size <número>  Número de entradas por lote");
   console.log("                         Por defecto: 15");
   console.log("");
-  console.log("  --no-rate-limits       Deshabilitar control de límites de velocidad");
+  console.log(
+    "  --no-rate-limits       Deshabilitar control de límites de velocidad"
+  );
   console.log("                         Por defecto: habilitado");
   console.log("");
   console.log("  --help                 Mostrar esta ayuda");
   console.log("");
-  
+
   console.log("TIERS DISPONIBLES:");
   console.log("  free_tier   - Hasta 10 RPM, 250k TPM, 250 RPD (gratis)");
   console.log("  tier_1      - Hasta 1000 RPM, 1M TPM, 10k RPD");
   console.log("  tier_2      - Hasta 2000 RPM, 3M TPM, 100k RPD");
   console.log("  tier_3      - Hasta 10k RPM, 8M TPM");
   console.log("");
-  
+
   console.log("EJEMPLOS:");
   console.log("  # Usar tier gratuito (por defecto)");
   console.log("  node index.js");
@@ -110,7 +122,9 @@ function showHelp() {
   console.log("  node index.js --tier tier_1 --model gemini-2.0-flash");
   console.log("");
   console.log("  # Archivo personalizado sin límites de velocidad");
-  console.log("  node index.js --input mi-archivo.json --output resultado.json --no-rate-limits");
+  console.log(
+    "  node index.js --input mi-archivo.json --output resultado.json --no-rate-limits"
+  );
   console.log("");
 }
 
@@ -147,12 +161,14 @@ function showProjectInfo() {
     `   🔄 Concurrencia: ${PROJECT_CONFIG.concurrencyLimit} lotes simultáneos`
   );
   console.log(`   🔁 Reintentos máximos: ${PROJECT_CONFIG.maxRetries}`);
-  console.log(
-    `   ⏱️  Delay entre reintentos: ${PROJECT_CONFIG.retryDelay}ms`
-  );
+  console.log(`   ⏱️  Delay entre reintentos: ${PROJECT_CONFIG.retryDelay}ms`);
   console.log(`   📊 Tier API: ${PROJECT_CONFIG.tier}`);
   console.log(`   🤖 Modelo: ${PROJECT_CONFIG.model}`);
-  console.log(`   🚦 Rate limiting: ${PROJECT_CONFIG.respectRateLimits ? 'Habilitado' : 'Deshabilitado'}\n`);
+  console.log(
+    `   🚦 Rate limiting: ${
+      PROJECT_CONFIG.respectRateLimits ? "Habilitado" : "Deshabilitado"
+    }\n`
+  );
 }
 
 /**
@@ -224,43 +240,63 @@ async function validatePrerequisites() {
  */
 function showFinalStats(report) {
   console.log("\n📊 === ESTADÍSTICAS FINALES ===");
-  console.log(`🎯 Tasa de éxito general: ${report.summary.successRate}`);
-  console.log(
-    `📝 Entradas procesadas: ${report.summary.successfulEntries}/${report.summary.totalEntries}`
-  );
-  console.log(
-    `📦 Lotes procesados: ${report.summary.successfulBatches}/${report.summary.totalBatches}`
-  );
-  console.log(`⏱️  Tiempo total: ${report.summary.durationFormatted}`);
 
-  if (report.summary.failedBatches > 0) {
+  // Verificar que el reporte y su summary existan
+  if (!report || !report.summary) {
+    console.log("❌ No se pudo generar el reporte de estadísticas");
+    return;
+  }
+
+  const summary = report.summary;
+
+  console.log(`🎯 Tasa de éxito general: ${summary.successRate || "N/A"}`);
+  console.log(
+    `📝 Entradas procesadas: ${summary.successfulEntries || 0}/${
+      summary.totalEntries || 0
+    }`
+  );
+  console.log(
+    `📦 Lotes procesados: ${summary.successfulBatches || 0}/${
+      summary.totalBatches || 0
+    }`
+  );
+  console.log(`⏱️  Tiempo total: ${summary.durationFormatted || "N/A"}`);
+
+  if ((summary.failedBatches || 0) > 0) {
     console.log(`\n⚠️  RESUMEN DE FALLOS:`);
-    console.log(`   📦 Lotes fallidos: ${report.summary.failedBatches}`);
-    console.log(
-      `   📝 Entradas no traducidas: ${report.summary.failedEntries}`
-    );
+    console.log(`   📦 Lotes fallidos: ${summary.failedBatches || 0}`);
+    console.log(`   📝 Entradas no traducidas: ${summary.failedEntries || 0}`);
 
-    // Mostrar los primeros 3 errores más comunes
-    const errorCounts = {};
-    report.failed.forEach((f) => {
-      const errorKey = f.error.substring(0, 50);
-      errorCounts[errorKey] = (errorCounts[errorKey] || 0) + 1;
-    });
-
-    const topErrors = Object.entries(errorCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
-
-    if (topErrors.length > 0) {
-      console.log(`   🔥 Errores más frecuentes:`);
-      topErrors.forEach(([error, count]) => {
-        console.log(`      ${count}x: ${error}...`);
+    // Mostrar los primeros 3 errores más comunes solo si existen
+    if (
+      report.processing &&
+      report.processing.failed &&
+      Array.isArray(report.processing.failed) &&
+      report.processing.failed.length > 0
+    ) {
+      const errorCounts = {};
+      report.processing.failed.forEach((f) => {
+        if (f && f.error) {
+          const errorKey = f.error.substring(0, 50);
+          errorCounts[errorKey] = (errorCounts[errorKey] || 0) + 1;
+        }
       });
+
+      const topErrors = Object.entries(errorCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+
+      if (topErrors.length > 0) {
+        console.log(`   🔥 Errores más frecuentes:`);
+        topErrors.forEach(([error, count]) => {
+          console.log(`      ${count}x: ${error}...`);
+        });
+      }
     }
   }
 
   const outputPath = path.resolve(PROJECT_CONFIG.outputFile);
-  if (report.summary.successfulEntries > 0) {
+  if ((summary.successfulEntries || 0) > 0) {
     console.log(`\n✅ Archivo de salida generado: ${outputPath}`);
     console.log(
       `📁 Puedes revisar las traducciones en: ${PROJECT_CONFIG.outputFile}`
@@ -305,21 +341,22 @@ async function main() {
 
     // Parsear argumentos de línea de comandos
     const cmdArgs = parseCommandLineArgs();
-    
+
     // Combinar configuración por defecto con argumentos
     const finalConfig = {
       ...PROJECT_CONFIG,
-      ...cmdArgs
+      ...cmdArgs,
     };
 
     // Mostrar información del proyecto con configuración final
     showProjectInfo();
-    
+
     if (cmdArgs.tier || cmdArgs.model || cmdArgs.respectRateLimits === false) {
       console.log("📝 CONFIGURACIÓN PERSONALIZADA DETECTADA:");
       if (cmdArgs.tier) console.log(`   📊 Tier: ${cmdArgs.tier}`);
       if (cmdArgs.model) console.log(`   🤖 Modelo: ${cmdArgs.model}`);
-      if (cmdArgs.respectRateLimits === false) console.log(`   🚦 Rate limiting: Deshabilitado`);
+      if (cmdArgs.respectRateLimits === false)
+        console.log(`   🚦 Rate limiting: Deshabilitado`);
       console.log("");
     }
 

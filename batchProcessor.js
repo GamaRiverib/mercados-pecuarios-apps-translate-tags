@@ -12,7 +12,7 @@ let rateLimiter = {
   requests: /** @type {number[]} */ ([]),
   limits: /** @type {any} */ (null),
   tier: "free_tier",
-  model: "gemini-1.5-flash"
+  model: "gemini-1.5-flash",
 };
 
 /**
@@ -44,18 +44,20 @@ async function loadRateLimits(rateLimitsFile = "rate-limits.json") {
     console.log(`📊 Límites de velocidad cargados desde: ${filePath}`);
     return rateLimits;
   } catch (error) {
-    console.warn(`⚠️ No se pudo cargar el archivo de límites: ${rateLimitsFile}`);
+    console.warn(
+      `⚠️ No se pudo cargar el archivo de límites: ${rateLimitsFile}`
+    );
     console.warn(`⚠️ Usando límites por defecto para free_tier`);
-    
+
     // Límites por defecto si no se puede cargar el archivo
     return {
       free_tier: {
         "gemini-1.5-flash": {
           rpm: 10,
           tpm: 250000,
-          rpd: 250
-        }
-      }
+          rpd: 250,
+        },
+      },
     };
   }
 }
@@ -68,20 +70,22 @@ async function loadRateLimits(rateLimitsFile = "rate-limits.json") {
  */
 async function initializeRateLimiter(tier, model, rateLimitsFile) {
   try {
-    const rateLimits = /** @type {any} */ (await loadRateLimits(rateLimitsFile));
-    
+    const rateLimits = /** @type {any} */ (
+      await loadRateLimits(rateLimitsFile)
+    );
+
     // Verificar que el tier existe
     if (!rateLimits[tier]) {
       throw new Error(`Tier "${tier}" no encontrado en el archivo de límites`);
     }
-    
+
     // Verificar que el modelo existe para ese tier
     if (!rateLimits[tier][model]) {
       // Buscar un modelo compatible
       const availableModels = Object.keys(rateLimits[tier]);
       console.warn(`⚠️ Modelo "${model}" no encontrado en tier "${tier}"`);
       console.warn(`⚠️ Modelos disponibles: ${availableModels.join(", ")}`);
-      
+
       // Usar el primer modelo disponible como fallback
       if (availableModels.length > 0) {
         const fallbackModel = availableModels[0];
@@ -91,12 +95,12 @@ async function initializeRateLimiter(tier, model, rateLimitsFile) {
         throw new Error(`No hay modelos disponibles en tier "${tier}"`);
       }
     }
-    
+
     rateLimiter.limits = rateLimits[tier][model];
     rateLimiter.tier = tier;
     rateLimiter.model = model;
     rateLimiter.requests = [];
-    
+
     console.log(`🚦 Rate limiter inicializado:`);
     console.log(`   📊 Tier: ${tier}`);
     console.log(`   🤖 Modelo: ${model}`);
@@ -105,7 +109,7 @@ async function initializeRateLimiter(tier, model, rateLimitsFile) {
     if (rateLimiter.limits?.rpd) {
       console.log(`   📅 RPD: ${rateLimiter.limits.rpd}`);
     }
-    
+
     return rateLimiter.limits;
   } catch (/** @type {any} */ error) {
     console.error(`❌ Error inicializando rate limiter: ${error.message}`);
@@ -121,13 +125,15 @@ function canMakeRequest() {
   if (!rateLimiter.limits || !rateLimiter.limits?.rpm) {
     return true; // Si no hay límites configurados, permitir
   }
-  
+
   const now = Date.now();
   const oneMinuteAgo = now - 60000; // 60 segundos en ms
-  
+
   // Filtrar peticiones del último minuto
-  rateLimiter.requests = rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo);
-  
+  rateLimiter.requests = rateLimiter.requests.filter(
+    (timestamp) => timestamp > oneMinuteAgo
+  );
+
   // Verificar si podemos hacer otra petición
   return rateLimiter.requests.length < rateLimiter.limits.rpm;
 }
@@ -149,25 +155,27 @@ function calculateWaitTime() {
   if (!rateLimiter.limits || !rateLimiter.limits?.rpm) {
     return 0;
   }
-  
+
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
-  
+
   // Filtrar peticiones del último minuto
-  rateLimiter.requests = rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo);
-  
+  rateLimiter.requests = rateLimiter.requests.filter(
+    (timestamp) => timestamp > oneMinuteAgo
+  );
+
   if (rateLimiter.requests.length === 0) {
     return 0; // No hay peticiones recientes
   }
-  
+
   if (rateLimiter.requests.length < rateLimiter.limits.rpm) {
     return 0; // Aún podemos hacer más peticiones
   }
-  
+
   // Calcular cuándo expira la petición más antigua
   const oldestRequest = Math.min(...rateLimiter.requests);
-  const waitTime = (oldestRequest + 60000) - now + 100; // +100ms de buffer
-  
+  const waitTime = oldestRequest + 60000 - now + 100; // +100ms de buffer
+
   return Math.max(0, waitTime);
 }
 
@@ -177,11 +185,13 @@ function calculateWaitTime() {
  */
 async function waitForRateLimit() {
   const waitTime = calculateWaitTime();
-  
+
   if (waitTime > 0) {
     const seconds = (waitTime / 1000).toFixed(1);
-    console.log(`🚦 Esperando ${seconds}s para respetar límite de ${rateLimiter.limits?.rpm} RPM...`);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    console.log(
+      `🚦 Esperando ${seconds}s para respetar límite de ${rateLimiter.limits?.rpm} RPM...`
+    );
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
   }
 }
 
@@ -193,23 +203,28 @@ function getRateLimiterStatus() {
   if (!rateLimiter.limits) {
     return {
       initialized: false,
-      message: "Rate limiter no inicializado"
+      message: "Rate limiter no inicializado",
     };
   }
-  
+
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
-  const recentRequests = /** @type {number[]} */ (rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo));
-  
+  const recentRequests = /** @type {number[]} */ (
+    rateLimiter.requests.filter((timestamp) => timestamp > oneMinuteAgo)
+  );
+
   return {
     initialized: true,
     tier: rateLimiter.tier,
     model: rateLimiter.model,
     limits: rateLimiter.limits,
     currentRequests: recentRequests.length,
-    remainingRequests: Math.max(0, rateLimiter.limits?.rpm - recentRequests.length),
+    remainingRequests: Math.max(
+      0,
+      rateLimiter.limits?.rpm - recentRequests.length
+    ),
     canMakeRequest: canMakeRequest(),
-    nextAvailableIn: calculateWaitTime()
+    nextAvailableIn: calculateWaitTime(),
   };
 }
 
@@ -523,7 +538,12 @@ async function processBatchesConcurrently(batches, config) {
 
   if (batches.length === 0) {
     console.log(`ℹ️  No hay lotes para procesar.`);
-    return { successful: [], failed: [], stoppedEarly: false, fatalError: null };
+    return {
+      successful: [],
+      failed: [],
+      stoppedEarly: false,
+      fatalError: null,
+    };
   }
 
   console.log(
@@ -532,7 +552,7 @@ async function processBatchesConcurrently(batches, config) {
 
   // Crear limitador de concurrencia
   const limit = pLimit(concurrencyLimit);
-  
+
   /**
    * @type {any[]}
    */
@@ -559,17 +579,19 @@ async function processBatchesConcurrently(batches, config) {
 
     try {
       console.log(`📦 Procesando lote ${batch.id} de ${batches.length}...`);
-      const result = await limit(() => processBatchWithRetry(batch, maxRetries, retryDelay));
-      
+      const result = await limit(() =>
+        processBatchWithRetry(batch, maxRetries, retryDelay)
+      );
+
       processedCount++;
-      
+
       // @ts-ignore
       if (result.success) {
         successful.push(result);
         console.log(`✅ Lote ${batch.id} completado exitosamente`);
       } else {
         failed.push(result);
-        
+
         // Verificar si es un error fatal que debe detener el procesamiento
         // @ts-ignore
         if (result.shouldStopProcessing) {
@@ -585,7 +607,7 @@ async function processBatchesConcurrently(batches, config) {
           fatalError = result.error;
           break;
         }
-        
+
         // @ts-ignore
         console.error(`❌ Lote ${batch.id} falló: ${result.error}`);
       }
@@ -609,7 +631,9 @@ async function processBatchesConcurrently(batches, config) {
       `⚠️  Procesamiento detenido prematuramente debido a error fatal`
     );
     console.log(
-      `📊 Lotes completados: ${successful.length}, Fallidos: ${failed.filter(f => !f.skipped).length}, Omitidos: ${failed.filter(f => f.skipped).length}`
+      `📊 Lotes completados: ${successful.length}, Fallidos: ${
+        failed.filter((f) => !f.skipped).length
+      }, Omitidos: ${failed.filter((f) => f.skipped).length}`
     );
   } else {
     console.log(
@@ -754,6 +778,18 @@ function generateReport(
           : "N/A",
       overallCompletionRate:
         ((combineStats.total / filterStats.total) * 100).toFixed(2) + "%",
+      // Campos adicionales para compatibilidad con showFinalStats
+      successRate:
+        totalBatches > 0
+          ? ((successful.length / totalBatches) * 100).toFixed(2) + "%"
+          : "N/A",
+      totalEntries: filterStats.total,
+      successfulEntries: combineStats.total,
+      failedEntries: filterStats.total - combineStats.total,
+      entriesSuccessRate:
+        filterStats.total > 0
+          ? ((combineStats.total / filterStats.total) * 100).toFixed(2)
+          : "0",
       durationMs: duration,
       durationFormatted: formatDuration(duration),
     },
@@ -1154,20 +1190,22 @@ async function processTranslation(inputFile, config = {}) {
       // Guardar traducciones parciales con sufijo especial
       const partialOutputFile = finalConfig.outputFile.replace(
         /(\.json)$/,
-        '_partial$1'
+        "_partial$1"
       );
-      
+
       console.log(
         `⚠️  Procesamiento detenido por error fatal: ${processingResults.fatalError}`
       );
       console.log(
         `💾 Guardando traducciones parciales en: ${partialOutputFile}`
       );
-      
+
       if (Object.keys(finalResult).length > 0) {
         await writeJsonFile(partialOutputFile, finalResult);
         console.log(
-          `✅ Traducciones parciales guardadas exitosamente (${Object.keys(finalResult).length} entradas)`
+          `✅ Traducciones parciales guardadas exitosamente (${
+            Object.keys(finalResult).length
+          } entradas)`
         );
       } else {
         console.log(`⚠️  No hay traducciones parciales para guardar.`);
@@ -1192,7 +1230,7 @@ async function processTranslation(inputFile, config = {}) {
 
     // 10. Mostrar resumen
     console.log("\n📋 === RESUMEN DEL PROCESAMIENTO ===");
-    
+
     if (processingResults.stoppedEarly) {
       console.log(
         `🛑 PROCESAMIENTO DETENIDO POR ERROR FATAL: ${processingResults.fatalError}`
@@ -1200,11 +1238,9 @@ async function processTranslation(inputFile, config = {}) {
       console.log(
         `� Traducciones parciales guardadas en archivo con sufijo '_partial'`
       );
-      console.log(
-        `📊 Progreso alcanzado antes del error:`
-      );
+      console.log(`📊 Progreso alcanzado antes del error:`);
     }
-    
+
     console.log(
       `�📝 Entradas originales: ${report.summary.totalOriginalEntries}`
     );
