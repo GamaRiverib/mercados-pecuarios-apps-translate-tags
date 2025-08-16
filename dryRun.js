@@ -13,7 +13,7 @@ const DRY_RUN_CONFIG = {
   enableKeyFiltering: true, // Habilitar filtrado
   skipTranslated: true, // Omitir traducidas
   tier: "free_tier", // Tier por defecto
-  model: "gemini-1.5-flash", // Modelo por defecto
+  model: "gemini-2.0-flash-lite", // Modelo por defecto
 };
 
 /**

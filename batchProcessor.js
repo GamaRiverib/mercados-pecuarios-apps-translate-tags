@@ -12,7 +12,7 @@ let rateLimiter = {
   requests: /** @type {number[]} */ ([]),
   limits: /** @type {any} */ (null),
   tier: "free_tier",
-  model: "gemini-1.5-flash",
+  model: "gemini-2.0-flash-lite",
 };
 
 /**
@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
   skipTranslated: true, // Si debe omitir entradas ya traducidas
   enableKeyFiltering: true, // Si debe filtrar claves que no necesitan traducción
   tier: "free_tier", // Tier de la API (free_tier, tier_1, tier_2, tier_3)
-  model: "gemini-1.5-flash", // Modelo de Gemini a usar
+  model: "gemini-2.0-flash-lite", // Modelo de Gemini a usar
   respectRateLimits: true, // Si debe respetar los límites de velocidad
   rateLimitsFile: "rate-limits.json", // Archivo con límites de velocidad
 };
@@ -52,10 +52,10 @@ async function loadRateLimits(rateLimitsFile = "rate-limits.json") {
     // Límites por defecto si no se puede cargar el archivo
     return {
       free_tier: {
-        "gemini-1.5-flash": {
-          rpm: 10,
-          tpm: 250000,
-          rpd: 250,
+        "gemini-2.0-flash-lite": {
+          rpm: 30,
+          tpm: 1000000,
+          rpd: 200,
         },
       },
     };

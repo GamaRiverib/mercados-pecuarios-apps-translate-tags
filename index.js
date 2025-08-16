@@ -4,7 +4,6 @@ const path = require("path");
 const {
   processTranslation,
   DEFAULT_CONFIG,
-  getRateLimiterStatus,
 } = require("./batchProcessor");
 const { testGeminiConnection, getModelInfo } = require("./geminiTranslator");
 const { getFileInfo, fileExists } = require("./fileHandler");
@@ -86,9 +85,9 @@ function showHelp() {
   console.log("");
   console.log("  --model <modelo>       Modelo de Gemini a usar");
   console.log(
-    "                         Valores: gemini-1.5-flash, gemini-2.0-flash, etc."
+    "                         Valores: gemini-1.5-flash, gemini-2.0-flash-lite, etc."
   );
-  console.log("                         Por defecto: gemini-1.5-flash");
+  console.log("                         Por defecto: gemini-2.0-flash-lite");
   console.log("");
   console.log("  --input <archivo>      Archivo JSON de entrada");
   console.log("                         Por defecto: us-mx.json");
@@ -119,7 +118,7 @@ function showHelp() {
   console.log("  node index.js");
   console.log("");
   console.log("  # Usar tier 1 con modelo específico");
-  console.log("  node index.js --tier tier_1 --model gemini-2.0-flash");
+  console.log("  node index.js --tier tier_1 --model gemini-2.0-flash-lite");
   console.log("");
   console.log("  # Archivo personalizado sin límites de velocidad");
   console.log(
@@ -389,7 +388,6 @@ async function main() {
     showFinalStats(report);
 
     // Determinar el código de salida
-    const hasFailures = report.summary.failedBatches > 0;
     const successRate = parseFloat(report.summary.entriesSuccessRate);
 
     if (successRate >= 90) {

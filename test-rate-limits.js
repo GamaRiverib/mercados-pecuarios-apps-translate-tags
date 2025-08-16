@@ -40,7 +40,7 @@ async function main() {
     // Obtener argumentos de línea de comandos
     const args = process.argv.slice(2);
     const tier = args.find(arg => arg.startsWith('--tier='))?.split('=')[1] || 'free_tier';
-    const model = args.find(arg => arg.startsWith('--model='))?.split('=')[1] || 'gemini-1.5-flash';
+    const model = args.find(arg => arg.startsWith('--model='))?.split('=')[1] || 'gemini-2.0-flash-lite';
     const numRequests = parseInt(args.find(arg => arg.startsWith('--requests='))?.split('=')[1] || '15');
     
     console.log(`⚙️ Configuración de test:`);
@@ -132,7 +132,7 @@ function showHelp() {
   console.log("  node test-rate-limits.js --tier=tier_1 --requests=25");
   console.log("");
   console.log("  # Test con modelo específico");
-  console.log("  node test-rate-limits.js --tier=free_tier --model=gemini-2.0-flash --requests=20");
+  console.log("  node test-rate-limits.js --tier=free_tier --model=gemini-2.0-flash-lite --requests=20");
   console.log("");
 }
 
