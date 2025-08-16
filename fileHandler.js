@@ -99,7 +99,7 @@ async function fileExists(filePath) {
 /**
  * Obtiene información sobre un archivo JSON
  * @param {string} filePath - Ruta al archivo JSON
- * @returns {Promise<Object>} - Información del archivo (tamaño, número de entradas, etc.)
+ * @returns {Promise<any>} - Información del archivo (tamaño, número de entradas, etc.)
  */
 async function getFileInfo(filePath) {
   try {

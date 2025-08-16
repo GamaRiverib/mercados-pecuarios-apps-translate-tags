@@ -10,6 +10,8 @@
     "start": "node index.js",
     "translate": "node index.js",
     "poc": "node index.js",
+    "dry-run": "node dryRun.js",
+    "test-filter": "node dryRun.js --samples --verbose",
     "test-connection": "node -e \"require('./geminiTranslator').testGeminiConnection().then(ok => process.exit(ok ? 0 : 1))\"",
     "validate": "node -e \"require('./index').validatePrerequisites().then(ok => process.exit(ok ? 0 : 1))\"",
     "info": "node -e \"require('./index').showProjectInfo()\"",
