@@ -1,9 +1,118 @@
 #!/usr/bin/env node
 
 const path = require("path");
-const { processTranslation, DEFAULT_CONFIG } = require("./batchProcessor");
+const { processTranslation, DEFAULT_CONFIG, getRateLimiterStatus } = require("./batchProcessor");
 const { testGeminiConnection, getModelInfo } = require("./geminiTranslator");
 const { getFileInfo, fileExists } = require("./fileHandler");
+
+/**
+ * Parsea argumentos de línea de comandos
+ * @returns {Object} - Configuración parseada desde argumentos
+ */
+function parseCommandLineArgs() {
+  const args = process.argv.slice(2);
+  const config = {};
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const nextArg = args[i + 1];
+    
+    switch (arg) {
+      case '--tier':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.tier = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--model':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.model = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--input':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.inputFile = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--output':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.outputFile = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--batch-size':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.batchSize = parseInt(nextArg);
+          i++; // Skip next argument
+        }
+        break;
+      case '--no-rate-limits':
+        config.respectRateLimits = false;
+        break;
+      case '--help':
+        showHelp();
+        process.exit(0);
+        break;
+    }
+  }
+  
+  return config;
+}
+
+/**
+ * Muestra ayuda del programa
+ */
+function showHelp() {
+  console.log("🎯 SISTEMA DE TRADUCCIÓN MASIVA");
+  console.log("📝 Traduce archivos JSON grandes del inglés al español usando Gemini AI\n");
+  
+  console.log("USO:");
+  console.log("  node index.js [opciones]\n");
+  
+  console.log("OPCIONES:");
+  console.log("  --tier <tier>          Tier de la API de Gemini");
+  console.log("                         Valores: free_tier, tier_1, tier_2, tier_3");
+  console.log("                         Por defecto: free_tier");
+  console.log("");
+  console.log("  --model <modelo>       Modelo de Gemini a usar");
+  console.log("                         Valores: gemini-1.5-flash, gemini-2.0-flash, etc.");
+  console.log("                         Por defecto: gemini-1.5-flash");
+  console.log("");
+  console.log("  --input <archivo>      Archivo JSON de entrada");
+  console.log("                         Por defecto: us-mx.json");
+  console.log("");
+  console.log("  --output <archivo>     Archivo JSON de salida");
+  console.log("                         Por defecto: us-mx-translated.json");
+  console.log("");
+  console.log("  --batch-size <número>  Número de entradas por lote");
+  console.log("                         Por defecto: 15");
+  console.log("");
+  console.log("  --no-rate-limits       Deshabilitar control de límites de velocidad");
+  console.log("                         Por defecto: habilitado");
+  console.log("");
+  console.log("  --help                 Mostrar esta ayuda");
+  console.log("");
+  
+  console.log("TIERS DISPONIBLES:");
+  console.log("  free_tier   - Hasta 10 RPM, 250k TPM, 250 RPD (gratis)");
+  console.log("  tier_1      - Hasta 1000 RPM, 1M TPM, 10k RPD");
+  console.log("  tier_2      - Hasta 2000 RPM, 3M TPM, 100k RPD");
+  console.log("  tier_3      - Hasta 10k RPM, 8M TPM");
+  console.log("");
+  
+  console.log("EJEMPLOS:");
+  console.log("  # Usar tier gratuito (por defecto)");
+  console.log("  node index.js");
+  console.log("");
+  console.log("  # Usar tier 1 con modelo específico");
+  console.log("  node index.js --tier tier_1 --model gemini-2.0-flash");
+  console.log("");
+  console.log("  # Archivo personalizado sin límites de velocidad");
+  console.log("  node index.js --input mi-archivo.json --output resultado.json --no-rate-limits");
+  console.log("");
+}
 
 /**
  * Configuración por defecto del proyecto
@@ -17,6 +126,9 @@ const PROJECT_CONFIG = {
   maxRetries: 3,
   retryDelay: 2000,
   enableKeyFiltering: true, // Habilitar filtrado inteligente
+  tier: "free_tier", // Tier por defecto
+  model: "gemini-1.5-flash", // Modelo por defecto
+  respectRateLimits: true, // Respetar límites de velocidad por defecto
 };
 
 /**
@@ -36,8 +148,11 @@ function showProjectInfo() {
   );
   console.log(`   🔁 Reintentos máximos: ${PROJECT_CONFIG.maxRetries}`);
   console.log(
-    `   ⏱️  Delay entre reintentos: ${PROJECT_CONFIG.retryDelay}ms\n`
+    `   ⏱️  Delay entre reintentos: ${PROJECT_CONFIG.retryDelay}ms`
   );
+  console.log(`   📊 Tier API: ${PROJECT_CONFIG.tier}`);
+  console.log(`   🤖 Modelo: ${PROJECT_CONFIG.model}`);
+  console.log(`   🚦 Rate limiting: ${PROJECT_CONFIG.respectRateLimits ? 'Habilitado' : 'Deshabilitado'}\n`);
 }
 
 /**
@@ -188,8 +303,25 @@ async function main() {
       handleExit(143, "Terminación por señal del sistema");
     });
 
-    // Mostrar información del proyecto
+    // Parsear argumentos de línea de comandos
+    const cmdArgs = parseCommandLineArgs();
+    
+    // Combinar configuración por defecto con argumentos
+    const finalConfig = {
+      ...PROJECT_CONFIG,
+      ...cmdArgs
+    };
+
+    // Mostrar información del proyecto con configuración final
     showProjectInfo();
+    
+    if (cmdArgs.tier || cmdArgs.model || cmdArgs.respectRateLimits === false) {
+      console.log("📝 CONFIGURACIÓN PERSONALIZADA DETECTADA:");
+      if (cmdArgs.tier) console.log(`   📊 Tier: ${cmdArgs.tier}`);
+      if (cmdArgs.model) console.log(`   🤖 Modelo: ${cmdArgs.model}`);
+      if (cmdArgs.respectRateLimits === false) console.log(`   🚦 Rate limiting: Deshabilitado`);
+      console.log("");
+    }
 
     // Validar prerrequisitos
     const prerequisitesOk = await validatePrerequisites();
@@ -206,11 +338,11 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Ejecutar el procesamiento principal
-    const inputPath = path.resolve(PROJECT_CONFIG.inputFile);
-    const outputPath = path.resolve(PROJECT_CONFIG.outputFile);
+    const inputPath = path.resolve(finalConfig.inputFile);
+    const outputPath = path.resolve(finalConfig.outputFile);
 
     const config = {
-      ...PROJECT_CONFIG,
+      ...finalConfig,
       outputFile: outputPath,
     };
 

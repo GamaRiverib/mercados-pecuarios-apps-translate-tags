@@ -1,8 +1,19 @@
 // @ts-check
 
 const pLimit = require("p-limit").default;
+const path = require("path");
 const { readJsonFile, writeJsonFile, getFileInfo } = require("./fileHandler");
 const { translateBatch } = require("./geminiTranslator");
+
+/**
+ * Control global de límites de velocidad
+ */
+let rateLimiter = {
+  requests: /** @type {number[]} */ ([]),
+  limits: /** @type {any} */ (null),
+  tier: "free_tier",
+  model: "gemini-1.5-flash"
+};
 
 /**
  * Configuración por defecto para el procesamiento por lotes
@@ -15,7 +26,192 @@ const DEFAULT_CONFIG = {
   outputFile: "output.json", // Archivo de salida por defecto
   skipTranslated: true, // Si debe omitir entradas ya traducidas
   enableKeyFiltering: true, // Si debe filtrar claves que no necesitan traducción
+  tier: "free_tier", // Tier de la API (free_tier, tier_1, tier_2, tier_3)
+  model: "gemini-1.5-flash", // Modelo de Gemini a usar
+  respectRateLimits: true, // Si debe respetar los límites de velocidad
+  rateLimitsFile: "rate-limits.json", // Archivo con límites de velocidad
 };
+
+/**
+ * Carga los límites de velocidad desde el archivo rate-limits.json
+ * @param {string} rateLimitsFile - Ruta al archivo de límites
+ * @returns {Promise<Object>} - Límites de velocidad
+ */
+async function loadRateLimits(rateLimitsFile = "rate-limits.json") {
+  try {
+    const filePath = path.resolve(rateLimitsFile);
+    const rateLimits = await readJsonFile(filePath);
+    console.log(`📊 Límites de velocidad cargados desde: ${filePath}`);
+    return rateLimits;
+  } catch (error) {
+    console.warn(`⚠️ No se pudo cargar el archivo de límites: ${rateLimitsFile}`);
+    console.warn(`⚠️ Usando límites por defecto para free_tier`);
+    
+    // Límites por defecto si no se puede cargar el archivo
+    return {
+      free_tier: {
+        "gemini-1.5-flash": {
+          rpm: 10,
+          tpm: 250000,
+          rpd: 250
+        }
+      }
+    };
+  }
+}
+
+/**
+ * Inicializa el controlador de límites de velocidad
+ * @param {string} tier - Tier de la API (free_tier, tier_1, tier_2, tier_3)
+ * @param {string} model - Modelo de Gemini
+ * @param {string} rateLimitsFile - Archivo de límites
+ */
+async function initializeRateLimiter(tier, model, rateLimitsFile) {
+  try {
+    const rateLimits = /** @type {any} */ (await loadRateLimits(rateLimitsFile));
+    
+    // Verificar que el tier existe
+    if (!rateLimits[tier]) {
+      throw new Error(`Tier "${tier}" no encontrado en el archivo de límites`);
+    }
+    
+    // Verificar que el modelo existe para ese tier
+    if (!rateLimits[tier][model]) {
+      // Buscar un modelo compatible
+      const availableModels = Object.keys(rateLimits[tier]);
+      console.warn(`⚠️ Modelo "${model}" no encontrado en tier "${tier}"`);
+      console.warn(`⚠️ Modelos disponibles: ${availableModels.join(", ")}`);
+      
+      // Usar el primer modelo disponible como fallback
+      if (availableModels.length > 0) {
+        const fallbackModel = availableModels[0];
+        console.warn(`⚠️ Usando modelo fallback: ${fallbackModel}`);
+        model = fallbackModel;
+      } else {
+        throw new Error(`No hay modelos disponibles en tier "${tier}"`);
+      }
+    }
+    
+    rateLimiter.limits = rateLimits[tier][model];
+    rateLimiter.tier = tier;
+    rateLimiter.model = model;
+    rateLimiter.requests = [];
+    
+    console.log(`🚦 Rate limiter inicializado:`);
+    console.log(`   📊 Tier: ${tier}`);
+    console.log(`   🤖 Modelo: ${model}`);
+    console.log(`   📈 RPM: ${rateLimiter.limits?.rpm}`);
+    console.log(`   🔢 TPM: ${rateLimiter.limits?.tpm}`);
+    if (rateLimiter.limits?.rpd) {
+      console.log(`   📅 RPD: ${rateLimiter.limits.rpd}`);
+    }
+    
+    return rateLimiter.limits;
+  } catch (/** @type {any} */ error) {
+    console.error(`❌ Error inicializando rate limiter: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Verifica si se puede hacer una nueva petición respetando los límites RPM
+ * @returns {boolean} - true si se puede hacer la petición
+ */
+function canMakeRequest() {
+  if (!rateLimiter.limits || !rateLimiter.limits?.rpm) {
+    return true; // Si no hay límites configurados, permitir
+  }
+  
+  const now = Date.now();
+  const oneMinuteAgo = now - 60000; // 60 segundos en ms
+  
+  // Filtrar peticiones del último minuto
+  rateLimiter.requests = rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo);
+  
+  // Verificar si podemos hacer otra petición
+  return rateLimiter.requests.length < rateLimiter.limits.rpm;
+}
+
+/**
+ * Registra una nueva petición en el contador
+ */
+function recordRequest() {
+  if (rateLimiter.limits) {
+    rateLimiter.requests.push(Date.now());
+  }
+}
+
+/**
+ * Calcula el tiempo de espera necesario para respetar los límites RPM
+ * @returns {number} - Tiempo de espera en milisegundos
+ */
+function calculateWaitTime() {
+  if (!rateLimiter.limits || !rateLimiter.limits?.rpm) {
+    return 0;
+  }
+  
+  const now = Date.now();
+  const oneMinuteAgo = now - 60000;
+  
+  // Filtrar peticiones del último minuto
+  rateLimiter.requests = rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo);
+  
+  if (rateLimiter.requests.length === 0) {
+    return 0; // No hay peticiones recientes
+  }
+  
+  if (rateLimiter.requests.length < rateLimiter.limits.rpm) {
+    return 0; // Aún podemos hacer más peticiones
+  }
+  
+  // Calcular cuándo expira la petición más antigua
+  const oldestRequest = Math.min(...rateLimiter.requests);
+  const waitTime = (oldestRequest + 60000) - now + 100; // +100ms de buffer
+  
+  return Math.max(0, waitTime);
+}
+
+/**
+ * Espera el tiempo necesario para respetar los límites de velocidad
+ * @returns {Promise<void>}
+ */
+async function waitForRateLimit() {
+  const waitTime = calculateWaitTime();
+  
+  if (waitTime > 0) {
+    const seconds = (waitTime / 1000).toFixed(1);
+    console.log(`🚦 Esperando ${seconds}s para respetar límite de ${rateLimiter.limits?.rpm} RPM...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+}
+
+/**
+ * Obtiene información actual del rate limiter
+ * @returns {Object} - Estado actual del rate limiter
+ */
+function getRateLimiterStatus() {
+  if (!rateLimiter.limits) {
+    return {
+      initialized: false,
+      message: "Rate limiter no inicializado"
+    };
+  }
+  
+  const now = Date.now();
+  const oneMinuteAgo = now - 60000;
+  const recentRequests = /** @type {number[]} */ (rateLimiter.requests.filter(timestamp => timestamp > oneMinuteAgo));
+  
+  return {
+    initialized: true,
+    tier: rateLimiter.tier,
+    model: rateLimiter.model,
+    limits: rateLimiter.limits,
+    currentRequests: recentRequests.length,
+    remainingRequests: Math.max(0, rateLimiter.limits?.rpm - recentRequests.length),
+    canMakeRequest: canMakeRequest(),
+    nextAvailableIn: calculateWaitTime()
+  };
+}
 
 /**
  * Verifica si un valor está vacío o necesita traducción
@@ -260,6 +456,12 @@ async function processBatchWithRetry(batch, maxRetries, retryDelay) {
         `🔄 Procesando lote ${batch.id} (intento ${attempt}/${maxRetries})...`
       );
 
+      // Esperar para respetar límites de velocidad antes de hacer la petición
+      if (rateLimiter.limits) {
+        await waitForRateLimit();
+        recordRequest();
+      }
+
       const translatedData = await translateBatch(batch.data);
 
       console.log(`✅ Lote ${batch.id} completado exitosamente`);
@@ -274,6 +476,21 @@ async function processBatchWithRetry(batch, maxRetries, retryDelay) {
       console.error(
         `❌ Error en lote ${batch.id}, intento ${attempt}: ${error.message}`
       );
+
+      // Verificar si es un error fatal que debe detener todo el procesamiento
+      if (error.shouldStop) {
+        console.error(
+          `🛑 Error fatal en lote ${batch.id}: ${error.message} - Deteniendo reintentos`
+        );
+        return {
+          success: false,
+          batchId: batch.id,
+          error: error.message,
+          attempts: attempt,
+          isFatal: true,
+          shouldStopProcessing: true,
+        };
+      }
 
       if (attempt < maxRetries) {
         const delay = retryDelay * Math.pow(2, attempt - 1); // Backoff exponencial
@@ -290,21 +507,23 @@ async function processBatchWithRetry(batch, maxRetries, retryDelay) {
     batchId: batch.id,
     error: lastError.message,
     attempts: maxRetries,
+    isFatal: lastError.isFatal || false,
+    shouldStopProcessing: lastError.shouldStop || false,
   };
 }
 
 /**
- * Procesa todos los lotes de forma concurrente
+ * Procesa todos los lotes de forma concurrente con detección de errores fatales
  * @param {Array<any>} batches - Array de lotes a procesar
  * @param {any} config - Configuración del procesamiento
- * @returns {Promise<any>} - Resultados del procesamiento
+ * @returns {Promise<any>} - Resultados del procesamiento con información de parada
  */
 async function processBatchesConcurrently(batches, config) {
   const { concurrencyLimit, maxRetries, retryDelay } = config;
 
   if (batches.length === 0) {
     console.log(`ℹ️  No hay lotes para procesar.`);
-    return { successful: [], failed: [] };
+    return { successful: [], failed: [], stoppedEarly: false, fatalError: null };
   }
 
   console.log(
@@ -313,42 +532,92 @@ async function processBatchesConcurrently(batches, config) {
 
   // Crear limitador de concurrencia
   const limit = pLimit(concurrencyLimit);
-
-  // Crear promesas para todos los lotes
-  const promises = batches.map((batch) =>
-    limit(() => processBatchWithRetry(batch, maxRetries, retryDelay))
-  );
-
-  // Procesar todos los lotes y esperar resultados
-  const results = await Promise.allSettled(promises);
-
-  // Analizar resultados
+  
   /**
    * @type {any[]}
    */
   const successful = [];
   /**@type {any[]} */
   const failed = [];
+  let stoppedEarly = false;
+  let fatalError = null;
+  let processedCount = 0;
 
-  results.forEach((/**@type {any} */ result, index) => {
-    if (result.status === "fulfilled") {
-      if (result.value.success) {
-        successful.push(result.value);
-      } else {
-        failed.push(result.value);
-      }
-    } else {
-      // Promise fue rechazada (esto no debería pasar con nuestro manejo de errores)
+  // Procesar lotes uno por uno para poder detectar errores fatales
+  for (const batch of batches) {
+    if (stoppedEarly) {
+      // Si ya encontramos un error fatal, marcar los lotes restantes como no procesados
       failed.push({
         success: false,
-        batchId: batches[index].id,
-        error: result.reason?.message || "Error desconocido",
+        batchId: batch.id,
+        error: "Procesamiento detenido por error fatal anterior",
         attempts: 0,
+        skipped: true,
       });
+      continue;
     }
-  });
 
-  return { successful, failed };
+    try {
+      console.log(`📦 Procesando lote ${batch.id} de ${batches.length}...`);
+      const result = await limit(() => processBatchWithRetry(batch, maxRetries, retryDelay));
+      
+      processedCount++;
+      
+      // @ts-ignore
+      if (result.success) {
+        successful.push(result);
+        console.log(`✅ Lote ${batch.id} completado exitosamente`);
+      } else {
+        failed.push(result);
+        
+        // Verificar si es un error fatal que debe detener el procesamiento
+        // @ts-ignore
+        if (result.shouldStopProcessing) {
+          console.error(
+            // @ts-ignore
+            `🛑 Error fatal detectado en lote ${batch.id}: ${result.error}`
+          );
+          console.error(
+            `🛑 Deteniendo procesamiento. Lotes procesados: ${processedCount}/${batches.length}`
+          );
+          stoppedEarly = true;
+          // @ts-ignore
+          fatalError = result.error;
+          break;
+        }
+        
+        // @ts-ignore
+        console.error(`❌ Lote ${batch.id} falló: ${result.error}`);
+      }
+    } catch (/**@type {any} */ error) {
+      // Manejo de errores inesperados
+      const errorResult = {
+        success: false,
+        batchId: batch.id,
+        // @ts-ignore
+        error: error.message || "Error desconocido",
+        attempts: 0,
+      };
+      failed.push(errorResult);
+      // @ts-ignore
+      console.error(`💀 Error inesperado en lote ${batch.id}:`, error.message);
+    }
+  }
+
+  if (stoppedEarly) {
+    console.log(
+      `⚠️  Procesamiento detenido prematuramente debido a error fatal`
+    );
+    console.log(
+      `📊 Lotes completados: ${successful.length}, Fallidos: ${failed.filter(f => !f.skipped).length}, Omitidos: ${failed.filter(f => f.skipped).length}`
+    );
+  } else {
+    console.log(
+      `✅ Procesamiento completo: ${successful.length} exitosos, ${failed.length} fallidos`
+    );
+  }
+
+  return { successful, failed, stoppedEarly, fatalError };
 }
 
 /**
@@ -452,7 +721,7 @@ function generateReport(
   const endTime = Date.now();
   const duration = endTime - startTime;
 
-  const { successful, failed } = processingResults;
+  const { successful, failed, stoppedEarly, fatalError } = processingResults;
 
   const successfulEntries = successful.reduce(
     (/**@type {any} */ sum, /**@type {any} */ result) =>
@@ -471,6 +740,8 @@ function generateReport(
       successfulNewTranslations: successfulEntries,
       failedTranslations: filterStats.needsTranslation - successfulEntries,
       finalResultEntries: combineStats.total,
+      stoppedEarly: stoppedEarly || false,
+      fatalError: fatalError || null,
       batchSuccessRate:
         totalBatches > 0
           ? ((successful.length / totalBatches) * 100).toFixed(2) + "%"
@@ -497,6 +768,7 @@ function generateReport(
         batchId: f.batchId,
         error: f.error,
         attempts: f.attempts,
+        skipped: f.skipped || false,
       })),
     },
     combining: combineStats,
@@ -821,6 +1093,18 @@ async function processTranslation(inputFile, config = {}) {
     console.log(`📁 Archivo de salida: ${finalConfig.outputFile}`);
     console.log(`⚙️  Configuración:`, finalConfig);
 
+    // 0. Inicializar rate limiter si está habilitado
+    if (finalConfig.respectRateLimits) {
+      console.log(`🚦 Inicializando control de límites de velocidad...`);
+      await initializeRateLimiter(
+        finalConfig.tier,
+        finalConfig.model,
+        finalConfig.rateLimitsFile
+      );
+    } else {
+      console.log(`⚠️  Control de límites de velocidad deshabilitado`);
+    }
+
     // 1. Leer archivo de entrada
     /**@type {any} */
     const inputData = await readJsonFile(inputFile);
@@ -865,11 +1149,36 @@ async function processTranslation(inputFile, config = {}) {
       originalKeys
     );
 
-    // 8. Guardar archivo de salida
-    if (Object.keys(finalResult).length > 0) {
-      await writeJsonFile(finalConfig.outputFile, finalResult);
+    // 8. Manejar guardado según si se detuvo por error fatal o no
+    if (processingResults.stoppedEarly) {
+      // Guardar traducciones parciales con sufijo especial
+      const partialOutputFile = finalConfig.outputFile.replace(
+        /(\.json)$/,
+        '_partial$1'
+      );
+      
+      console.log(
+        `⚠️  Procesamiento detenido por error fatal: ${processingResults.fatalError}`
+      );
+      console.log(
+        `💾 Guardando traducciones parciales en: ${partialOutputFile}`
+      );
+      
+      if (Object.keys(finalResult).length > 0) {
+        await writeJsonFile(partialOutputFile, finalResult);
+        console.log(
+          `✅ Traducciones parciales guardadas exitosamente (${Object.keys(finalResult).length} entradas)`
+        );
+      } else {
+        console.log(`⚠️  No hay traducciones parciales para guardar.`);
+      }
     } else {
-      console.log(`⚠️  No hay datos para guardar en el archivo de salida.`);
+      // Guardado normal
+      if (Object.keys(finalResult).length > 0) {
+        await writeJsonFile(finalConfig.outputFile, finalResult);
+      } else {
+        console.log(`⚠️  No hay datos para guardar en el archivo de salida.`);
+      }
     }
 
     // 9. Generar reporte
@@ -883,8 +1192,21 @@ async function processTranslation(inputFile, config = {}) {
 
     // 10. Mostrar resumen
     console.log("\n📋 === RESUMEN DEL PROCESAMIENTO ===");
+    
+    if (processingResults.stoppedEarly) {
+      console.log(
+        `🛑 PROCESAMIENTO DETENIDO POR ERROR FATAL: ${processingResults.fatalError}`
+      );
+      console.log(
+        `� Traducciones parciales guardadas en archivo con sufijo '_partial'`
+      );
+      console.log(
+        `📊 Progreso alcanzado antes del error:`
+      );
+    }
+    
     console.log(
-      `📝 Entradas originales: ${report.summary.totalOriginalEntries}`
+      `�📝 Entradas originales: ${report.summary.totalOriginalEntries}`
     );
     console.log(
       `✅ Ya traducidas (omitidas): ${report.summary.entriesAlreadyTranslated}`
@@ -912,7 +1234,11 @@ async function processTranslation(inputFile, config = {}) {
     if (report.summary.failedBatches > 0) {
       console.log("\n❌ LOTES FALLIDOS:");
       report.processing.failed.forEach((/**@type {any} */ f) => {
-        console.log(`   Lote ${f.batchId}: ${f.error}`);
+        if (f.skipped) {
+          console.log(`   Lote ${f.batchId}: ${f.error} (omitido)`);
+        } else {
+          console.log(`   Lote ${f.batchId}: ${f.error}`);
+        }
       });
     }
 
@@ -937,5 +1263,12 @@ module.exports = {
   assembleResults,
   combineResults,
   generateReport,
+  // Rate limiting functions
+  initializeRateLimiter,
+  loadRateLimits,
+  canMakeRequest,
+  recordRequest,
+  waitForRateLimit,
+  getRateLimiterStatus,
   DEFAULT_CONFIG,
 };

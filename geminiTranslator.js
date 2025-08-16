@@ -27,6 +27,7 @@ const API_LIMITS = {
 /**
  * Cliente de Gemini inicializado
  */
+/** @type {GoogleGenAI | null} */
 let genAI = null;
 let chat = null;
 
@@ -56,7 +57,7 @@ function initializeGemini(apiKey = null) {
     });
 
     console.log("✅ Cliente de Gemini inicializado correctamente");
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     console.error("❌ Error inicializando Gemini:", error.message);
     throw error;
   }
@@ -71,7 +72,7 @@ async function loadPromptTemplate() {
     const promptPath = path.join(__dirname, "prompt.md");
     const promptContent = await fs.readFile(promptPath, "utf-8");
     return promptContent.trim();
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     console.error("❌ Error leyendo el archivo prompt.md:", error.message);
     throw new Error("No se pudo cargar el template del prompt");
   }
@@ -91,7 +92,7 @@ async function buildPrompt(batchData) {
     const fullPrompt = template + "\n" + jsonString;
 
     return fullPrompt;
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     throw new Error(`Error construyendo el prompt: ${error.message}`);
   }
 }
@@ -157,6 +158,7 @@ function validateAndParseResponse(response, originalBatch) {
     }
 
     // Filtrar solo las claves originales
+    /** @type {any} */
     const filteredResponse = {};
     originalKeys.forEach((key) => {
       filteredResponse[key] = parsedResponse[key];
@@ -222,36 +224,52 @@ function validateBatchSize(batchData, prompt) {
 /**
  * Maneja errores específicos de la API de Gemini
  * @param {Error} error - Error original
- * @returns {Error} - Error procesado con mensaje más descriptivo
+ * @returns {Object} - Error procesado con información adicional
  */
 function handleGeminiError(error) {
   let message = error.message;
+  let isFatal = false;
+  let shouldStop = false;
 
   if (
     error.message.includes("RATE_LIMIT_EXCEEDED") ||
     error.message.includes("429")
   ) {
-    message = "Límite de tasa excedido en la API de Gemini. Reintentando...";
-  } else if (error.message.includes("INVALID_API_KEY")) {
-    message = "API key de Gemini inválida";
+    message = "Límite de tasa excedido en la API de Gemini";
+    isFatal = true;
+    shouldStop = true;
   } else if (error.message.includes("QUOTA_EXCEEDED")) {
     message = "Cuota de la API de Gemini excedida";
+    isFatal = true;
+    shouldStop = true;
+  } else if (error.message.includes("INVALID_API_KEY")) {
+    message = "API key de Gemini inválida";
+    isFatal = true;
+    shouldStop = true;
   } else if (error.message.includes("CONTENT_FILTER")) {
     message = "Contenido bloqueado por los filtros de seguridad de Gemini";
   } else if (error.message.includes("MODEL_NOT_FOUND")) {
     message = "Modelo de Gemini no encontrado";
+    isFatal = true;
+    shouldStop = true;
   } else if (error.message.includes("INTERNAL")) {
     message = "Error interno del servidor de Gemini";
   }
 
-  return new Error(message);
+  const processedError = new Error(message);
+  // @ts-ignore
+  processedError.isFatal = isFatal;
+  // @ts-ignore
+  processedError.shouldStop = shouldStop;
+  
+  return processedError;
 }
 
 /**
  * Traduce un lote de datos usando la API de Gemini
  * @param {Object} batchData - Objeto JSON con los datos a traducir
  * @param {Object} options - Opciones adicionales
- * @returns {Promise<Object>} - Objeto JSON con las traducciones
+ * @returns {Promise<any>} - Objeto JSON con las traducciones
  * @throws {Error} - Si hay problemas con la traducción
  */
 async function translateBatch(batchData, options = {}) {
@@ -259,6 +277,11 @@ async function translateBatch(batchData, options = {}) {
     // Inicializar Gemini si no está inicializado
     if (!genAI) {
       initializeGemini();
+    }
+
+    if (!genAI) {
+      console.error("❌ Gemini no está inicializado");
+      throw new Error("Gemini no está disponible");
     }
 
     // Construir el prompt
@@ -273,9 +296,9 @@ async function translateBatch(batchData, options = {}) {
 
     // Realizar la llamada a la API con la nueva biblioteca
     const startTime = Date.now();
-    const chat = await genAI.chats.create({
+    const chat = genAI.chats.create({
       model: DEFAULT_GEMINI_CONFIG.model,
-      generationConfig: {
+      config: {
         temperature: DEFAULT_GEMINI_CONFIG.temperature,
         maxOutputTokens: DEFAULT_GEMINI_CONFIG.maxOutputTokens,
         topK: DEFAULT_GEMINI_CONFIG.topK,
@@ -314,9 +337,14 @@ async function translateBatch(batchData, options = {}) {
     );
 
     return translatedData;
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     const processedError = handleGeminiError(error);
+    // @ts-ignore
     console.error(`❌ Error en traducción de lote:`, processedError.message);
+    // @ts-ignore
+    if (processedError.shouldStop) {
+      console.error(`🛑 Error fatal detectado, se debe detener el procesamiento`);
+    }
     throw processedError;
   }
 }
@@ -342,7 +370,7 @@ async function testGeminiConnection() {
     } else {
       throw new Error("Respuesta inesperada en la prueba");
     }
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     console.error("❌ Error en la prueba de conexión:", error.message);
     return false;
   }

@@ -12,7 +12,82 @@ const DRY_RUN_CONFIG = {
   batchSize: 15, // Tamaño de lote a simular
   enableKeyFiltering: true, // Habilitar filtrado
   skipTranslated: true, // Omitir traducidas
+  tier: "free_tier", // Tier por defecto
+  model: "gemini-1.5-flash", // Modelo por defecto
 };
+
+/**
+ * Parsea argumentos de línea de comandos para dry run
+ * @returns {Object} - Configuración parseada desde argumentos
+ */
+function parseCommandLineArgs() {
+  const args = process.argv.slice(2);
+  const config = {};
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const nextArg = args[i + 1];
+    
+    switch (arg) {
+      case '--tier':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.tier = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--model':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.model = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--input':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.inputFile = nextArg;
+          i++; // Skip next argument
+        }
+        break;
+      case '--batch-size':
+        if (nextArg && !nextArg.startsWith('--')) {
+          config.batchSize = parseInt(nextArg);
+          i++; // Skip next argument
+        }
+        break;
+      case '--help':
+        showHelp();
+        process.exit(0);
+        break;
+    }
+  }
+  
+  return config;
+}
+
+/**
+ * Muestra ayuda del dry run
+ */
+function showHelp() {
+  console.log("🧪 ANÁLISIS DE FILTRADO (DRY RUN)");
+  console.log("📋 Analiza qué claves se filtrarían sin hacer llamadas a la API\n");
+  
+  console.log("USO:");
+  console.log("  node dryRun.js [opciones]\n");
+  
+  console.log("OPCIONES:");
+  console.log("  --tier <tier>          Tier de la API para el análisis");
+  console.log("                         Valores: free_tier, tier_1, tier_2, tier_3");
+  console.log("  --model <modelo>       Modelo para el análisis");
+  console.log("  --input <archivo>      Archivo JSON a analizar");
+  console.log("  --batch-size <número>  Tamaño de lote a simular");
+  console.log("  --help                 Mostrar esta ayuda");
+  console.log("");
+  
+  console.log("EJEMPLOS:");
+  console.log("  node dryRun.js");
+  console.log("  node dryRun.js --tier tier_1 --batch-size 20");
+  console.log("  node dryRun.js --input mi-archivo.json");
+  console.log("");
+}
 
 /**
  * Función principal para ejecutar el análisis de filtrado
@@ -25,36 +100,42 @@ async function main() {
     );
     console.log("🚫 SIN hacer llamadas reales a la API de Gemini\n");
 
-    // Verificar argumentos de línea de comandos
-    const args = process.argv.slice(2);
-    let inputFile = DRY_RUN_CONFIG.inputFile;
-
-    if (args.length > 0 && !args[0].startsWith("--")) {
-      inputFile = args[0];
-      console.log(`📁 Usando archivo personalizado: ${inputFile}`);
+    // Parsear argumentos de línea de comandos
+    const cmdArgs = parseCommandLineArgs();
+    
+    // Combinar configuración por defecto con argumentos
+    const finalConfig = {
+      ...DRY_RUN_CONFIG,
+      ...cmdArgs
+    };
+    
+    if (cmdArgs.tier || cmdArgs.model || cmdArgs.inputFile || cmdArgs.batchSize) {
+      console.log("📝 CONFIGURACIÓN PERSONALIZADA DETECTADA:");
+      if (cmdArgs.tier) console.log(`   📊 Tier: ${cmdArgs.tier}`);
+      if (cmdArgs.model) console.log(`   🤖 Modelo: ${cmdArgs.model}`);
+      if (cmdArgs.inputFile) console.log(`   📁 Archivo: ${cmdArgs.inputFile}`);
+      if (cmdArgs.batchSize) console.log(`   📦 Tamaño lote: ${cmdArgs.batchSize}`);
+      console.log("");
     }
 
-    // Verificar opciones
-    const enableFiltering = !args.includes("--no-filter");
+    // Verificar que el archivo existe
+    const inputPath = path.resolve(finalConfig.inputFile);
+
+    // Verificar opciones adicionales de los argumentos originales
+    const args = process.argv.slice(2);
     const showSamples = args.includes("--samples");
     const verbose = args.includes("--verbose");
 
-    const config = {
-      ...DRY_RUN_CONFIG,
-      enableKeyFiltering: enableFiltering,
-    };
-
     console.log(`⚙️ Configuración:`);
-    console.log(
-      `   🔍 Filtrado de claves: ${
-        enableFiltering ? "Habilitado" : "Deshabilitado"
-      }`
-    );
-    console.log(`   📊 Muestras detalladas: ${showSamples ? "Sí" : "No"}`);
-    console.log(`   📝 Modo verbose: ${verbose ? "Sí" : "No"}\n`);
+    console.log(`   📁 Archivo: ${finalConfig.inputFile}`);
+    console.log(`   🔍 Filtrado: ${finalConfig.enableKeyFiltering ? 'Habilitado' : 'Deshabilitado'}`);
+    console.log(`   📦 Tamaño de lote: ${finalConfig.batchSize}`);
+    console.log(`   📊 Tier: ${finalConfig.tier}`);
+    console.log(`   🤖 Modelo: ${finalConfig.model}`);
+    console.log("");
 
     // Ejecutar análisis
-    const analysis = await dryRunAnalysis(path.resolve(inputFile), config);
+    const analysis = await dryRunAnalysis(inputPath, finalConfig);
 
     // Mostrar información adicional si se solicita
     if (showSamples) {
