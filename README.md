@@ -216,17 +216,27 @@ npm start
 npm run translate
 npm run poc
 
-# Validar configuración
-npm run validate
+# Herramientas de análisis
+npm run dry-run              # Análisis de filtrado sin traducir
+npm run test-filter          # Análisis detallado con muestras
 
-# Probar conexión API
-npm run test-connection
+# Consolidación de traducciones
+npm run consolidate          # Combinar traducciones parciales
+npm run consolidate-help     # Ayuda de consolidación
 
-# Mostrar información
-npm run info
+# Conversión a CSV
+npm run to-csv               # Convertir JSON traducido a CSV
+npm run csv                  # Alias para to-csv
+npm run csv-help             # Ayuda de conversión CSV
 
-# Ayuda detallada
-npm run help
+# Validación y testing
+npm run validate             # Validar configuración
+npm run test-connection      # Probar conexión API
+npm run test-rate-limits     # Probar límites de velocidad
+
+# Información y ayuda
+npm run info                 # Mostrar información del proyecto
+npm run help                 # Ayuda detallada
 ```
 
 ### Ejecución Paso a Paso
@@ -449,6 +459,65 @@ fi
 3. **Almacenamiento**: Usar bases de datos para grandes volúmenes
 4. **Cache**: Implementar cache de traducciones
 5. **Queue**: Usar sistemas de colas (Redis/RabbitMQ)
+
+## 📊 Conversión a CSV
+
+El sistema incluye una utilidad para convertir archivos JSON traducidos a formato CSV, facilitando el análisis en hojas de cálculo.
+
+### Uso Básico
+
+```bash
+# Conversión simple
+npm run to-csv archivo-traducido.json
+
+# Con opciones personalizadas
+npm run to-csv -- archivo.json --output traducciones.csv
+```
+
+### Opciones Disponibles
+
+```bash
+--input, -i <archivo>     # Archivo JSON de entrada
+--output, -o <archivo>    # Archivo CSV de salida
+--delimiter, -d <char>    # Delimitador CSV (por defecto: ',')
+--no-header               # No incluir encabezados
+--key-header <nombre>     # Nombre del encabezado de claves
+--value-header <nombre>   # Nombre del encabezado de valores
+--encoding <codificación> # Codificación del archivo (utf-8)
+--no-escape               # No escapar comillas en los valores
+```
+
+### Ejemplos de Conversión
+
+```bash
+# Formato estándar con comas
+npm run to-csv output.json
+
+# Formato europeo con punto y coma
+npm run to-csv -- output.json --delimiter ";"
+
+# Encabezados personalizados
+npm run to-csv -- output.json --key-header "Original" --value-header "Español"
+
+# Sin encabezados para importación
+npm run to-csv -- output.json --no-header --output datos.csv
+```
+
+### Formato de Salida
+
+El CSV generado tiene la estructura:
+
+```csv
+Key,Translation
+"All Products, Milk Equivalent","Todos los Productos, Equivalente a Leche"
+"Beef for Stew","Carne de Res para Guiso"
+"Chicken Breast","Pechuga de Pollo"
+```
+
+- ✅ **Escape automático** de comas y comillas
+- ✅ **Encabezados configurables**
+- ✅ **Compatible** con Excel, Google Sheets, etc.
+- ✅ **Codificación UTF-8** para caracteres especiales
 
 ### Posibles Mejoras
 

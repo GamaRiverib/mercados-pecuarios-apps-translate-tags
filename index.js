@@ -125,6 +125,13 @@ function showHelp() {
     "  node index.js --input mi-archivo.json --output resultado.json --no-rate-limits"
   );
   console.log("");
+  
+  console.log("COMANDOS ADICIONALES:");
+  console.log("  npm run dry-run        Análisis de filtrado sin traducir");
+  console.log("  npm run consolidate    Combinar traducciones parciales");
+  console.log("  npm run to-csv         Convertir JSON traducido a CSV");
+  console.log("  npm run help           Mostrar esta ayuda");
+  console.log("");
 }
 
 /**
