@@ -229,6 +229,11 @@ npm run to-csv               # Convertir JSON traducido a CSV
 npm run csv                  # Alias para to-csv
 npm run csv-help             # Ayuda de conversión CSV
 
+# Informe Ejecutivo
+npm run report               # Generar informe ejecutivo en Markdown
+npm run executive-report     # Alias para report
+npm run report-help          # Ayuda de informe ejecutivo
+
 # Validación y testing
 npm run validate             # Validar configuración
 npm run test-connection      # Probar conexión API
@@ -459,6 +464,92 @@ fi
 3. **Almacenamiento**: Usar bases de datos para grandes volúmenes
 4. **Cache**: Implementar cache de traducciones
 5. **Queue**: Usar sistemas de colas (Redis/RabbitMQ)
+
+## 📊 Informe Ejecutivo
+
+El comando de informe ejecutivo genera un análisis detallado en formato Markdown del archivo de entrada, similar al dry-run pero con un formato profesional para reportes y documentación.
+
+### Uso Básico
+
+```bash
+# Informe completo con archivo por defecto
+npm run report
+
+# Informe para archivo específico
+npm run report mi-archivo.json
+
+# Informe con configuración personalizada
+npm run executive-report -- --input data.json --output analysis.md
+
+# Ver opciones disponibles
+npm run report-help
+```
+
+### Opciones del Comando
+
+```bash
+node executiveReport.js [archivo.json] [opciones]
+
+--input, -i <archivo>     Archivo JSON de entrada
+--output, -o <archivo>    Archivo Markdown de salida
+--tier <tier>             Tier de la API (free_tier, tier_1, etc.)
+--model <modelo>          Modelo de Gemini a usar
+--no-filter               Simular sin filtrado de claves
+--no-patterns             No incluir patrones detallados
+--no-recommendations      No incluir recomendaciones
+--no-samples              No incluir muestras de claves
+--max-samples <número>    Máximo número de muestras (por defecto: 15)
+--help, -h                Mostrar ayuda
+```
+
+### Ejemplos Avanzados
+
+```bash
+# Informe completo con archivo específico
+npm run report us-mx.json
+
+# Informe compacto sin muestras ni patrones
+npm run report data.json -- --no-samples --no-patterns
+
+# Sin filtrado para ver impacto total
+npm run report data.json -- --no-filter
+
+# Para tier específico con modelo personalizado
+npm run report data.json -- --tier tier_1 --model gemini-2.0-flash-lite
+
+# Personalizar número de muestras mostradas
+npm run report data.json -- --max-samples 25 --output detailed_analysis.md
+```
+
+### Contenido del Informe
+
+El informe ejecutivo incluye las siguientes secciones:
+
+- **📋 Información General**: Archivo analizado, fecha, configuración, tamaño
+- **📈 Resumen Ejecutivo**: Análisis de alto nivel con métricas clave
+- **📊 Estadísticas Principales**: Tabla detallada con todas las métricas
+- **🔄 Información de Procesamiento**: Lotes, llamadas API, distribución
+- **🔍 Top Patrones de Exclusión**: Tabla con patrones más frecuentes
+- **📝 Muestras de Claves**: Ejemplos representativos de claves a traducir
+- **💡 Recomendaciones**: Estrategias de procesamiento y optimización
+- **🔧 Información Técnica**: Configuración aplicada y patrones de filtrado
+
+### Cuándo Usar el Informe Ejecutivo
+
+- **📋 Análisis inicial**: Antes de procesar archivos grandes para planificar estrategia
+- **📈 Reportes de estado**: Documentar el progreso y resultados del análisis
+- **🎯 Toma de decisiones**: Evaluar diferentes estrategias de procesamiento
+- **📄 Documentación**: Mantener registro histórico de análisis realizados
+- **⚡ Optimización**: Identificar patrones para mejorar el filtrado de claves
+
+### Ejemplo de Salida
+
+El informe incluye métricas como:
+- Total de entradas vs. necesitan traducción
+- Eficiencia del filtrado (% de entradas omitidas)
+- Estimación de llamadas API y costos
+- Top patrones de exclusión más efectivos
+- Recomendaciones específicas según el tamaño del archivo
 
 ## 📊 Conversión a CSV
 

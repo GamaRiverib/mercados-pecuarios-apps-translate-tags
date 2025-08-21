@@ -129,7 +129,10 @@ function showHelp() {
   console.log("COMANDOS ADICIONALES:");
   console.log("  npm run dry-run        Análisis de filtrado sin traducir");
   console.log("  npm run consolidate    Combinar traducciones parciales");
-  console.log("  npm run to-csv         Convertir JSON traducido a CSV");
+  console.log("  npm run csv-help              Ayuda detallada para exportar a CSV");
+  console.log("  npm run report [archivo]      Generar informe ejecutivo en Markdown");
+  console.log("  npm run report-help           Ayuda detallada para informe ejecutivo");
+  console.log("");
   console.log("  npm run help           Mostrar esta ayuda");
   console.log("");
 }
