@@ -553,29 +553,49 @@ El informe incluye métricas como:
 
 ## 📊 Conversión a CSV
 
-El sistema incluye una utilidad para convertir archivos JSON traducidos a formato CSV, facilitando el análisis en hojas de cálculo.
+El sistema incluye una utilidad para convertir archivos JSON traducidos a formato CSV, facilitando el análisis en hojas de cálculo. La utilidad ofrece dos modos: **archivo único** (tradicional) y **múltiples archivos categorizados** (para análisis especializado).
 
 ### Uso Básico
 
 ```bash
-# Conversión simple
+# Conversión estándar a un solo archivo
 npm run to-csv archivo-traducido.json
 
-# Con opciones personalizadas
+# Conversión con archivo de salida específico
 npm run to-csv -- archivo.json --output traducciones.csv
+
+# Ver opciones disponibles
+npm run csv-help
+```
+
+### 🆕 Múltiples Archivos por Categoría
+
+**Nuevo:** La utilidad puede generar múltiples archivos CSV categorizados, ideal para que especialistas humanos revisen y validen cada tipo de entrada por separado.
+
+```bash
+# Generar múltiples archivos categorizados
+npm run to-csv archivo.json -- --multiple-files
+
+# Múltiples archivos en directorio específico
+npm run to-csv archivo.json -- --split --output-dir analysis
+
+# Con configuración personalizada
+npm run to-csv archivo.json -- --multiple-files --delimiter ";" --key-header "Original"
 ```
 
 ### Opciones Disponibles
 
 ```bash
 --input, -i <archivo>     # Archivo JSON de entrada
---output, -o <archivo>    # Archivo CSV de salida
+--output, -o <archivo>    # Archivo CSV de salida (modo único)
 --delimiter, -d <char>    # Delimitador CSV (por defecto: ',')
 --no-header               # No incluir encabezados
 --key-header <nombre>     # Nombre del encabezado de claves
 --value-header <nombre>   # Nombre del encabezado de valores
 --encoding <codificación> # Codificación del archivo (utf-8)
 --no-escape               # No escapar comillas en los valores
+--multiple-files, --split # 🆕 Generar múltiples archivos por categoría
+--output-dir <directorio> # 🆕 Directorio para múltiples archivos
 ```
 
 ### Ejemplos de Conversión
@@ -592,7 +612,40 @@ npm run to-csv -- output.json --key-header "Original" --value-header "Español"
 
 # Sin encabezados para importación
 npm run to-csv -- output.json --no-header --output datos.csv
+
+# 🆕 Múltiples archivos categorizados para validación
+npm run to-csv us-mx.json -- --multiple-files
+
+# 🆕 Múltiples archivos con directorio personalizado
+npm run to-csv output.json -- --split --output-dir validation_analysis
 ```
+
+### 📂 Categorías de Múltiples Archivos
+
+Cuando se usa `--multiple-files`, el sistema genera archivos separados para cada categoría:
+
+| Categoría | Archivo | Descripción | Uso |
+|-----------|---------|-------------|-----|
+| ✅ **Traducidas** | `*_translated_*.csv` | Entradas que ya tienen traducción | Validar calidad de traducciones |
+| 🔢 **Números puros** | `*_pureNumbers_*.csv` | Años, códigos numéricos (2013, 4075) | Verificar que no requieren traducción |
+| 📏 **Números con unidades** | `*_numbersWithUnits_*.csv` | Medidas, rangos (100-140 kg, 1,000+ lb) | Revisar unidades de medida |
+| 📅 **Años de temporada** | `*_seasonYears_*.csv` | Formatos 1998/99, 2023/24 | Validar formato temporal |
+| 🇪🇸 **Texto en español** | `*_spanishText_*.csv` | Ya contiene acentos o ñ | Confirmar que no necesitan traducción |
+| 🏷️ **Prefijos específicos** | `*_prefixPatterns_*.csv` | YTD_, DC_*, _Daily | Revisar patrones técnicos |
+| 📆 **Fechas abreviadas** | `*_dateAbbreviations_*.csv` | Aug'24, Jan'25 | Validar formatos de fecha |
+| 🌍 **Códigos de país** | `*_countryCodes_*.csv` | USA, MEX, CAN | Verificar códigos internacionales |
+| 🏢 **Empresas mexicanas** | `*_mexicanCompanies_*.csv` | S.A. de C.V., etc. | Revisar nombres de empresas |
+| 🏭 **Códigos TIF** | `*_tifCodes_*.csv` | TIF 123, etc. | Validar códigos industriales |
+| 💰 **Códigos financieros** | `*_financialCodes_*.csv` | FRED, GDP, USD | Revisar términos financieros |
+| 📈 **Códigos de futuros** | `*_futuresCodes_*.csv` | Daily - Nearby, etc. | Validar terminología de mercados |
+| ❓ **Otras/Requieren traducción** | `*_other_*.csv` | Entradas sin categorizar | **REQUIERE REVISIÓN MANUAL** |
+
+### 📊 Archivo de Resumen
+
+El modo de múltiples archivos incluye un `summary_report.txt` con:
+- **Estadísticas generales**: Total de entradas, distribución por categoría
+- **Lista de archivos generados**: Con número de entradas por archivo
+- **Recomendaciones**: Acciones sugeridas para cada categoría
 
 ### Formato de Salida
 
@@ -609,6 +662,16 @@ Key,Translation
 - ✅ **Encabezados configurables**
 - ✅ **Compatible** con Excel, Google Sheets, etc.
 - ✅ **Codificación UTF-8** para caracteres especiales
+- 🆕 **Categorización automática** para análisis especializado
+
+### 🎯 Casos de Uso para Múltiples Archivos
+
+- **👥 Validación por especialistas**: Cada experto revisa su área (números, empresas, etc.)
+- **📊 Análisis de patrones**: Identificar mejoras en el filtrado automático
+- **✅ Control de calidad**: Verificar que las exclusiones son correctas
+- **📈 Optimización**: Ajustar patrones basándose en casos reales
+- **🔍 Auditoría**: Documentar decisiones de categorización
+- **🏭 Workflow industrial**: Flujo de trabajo para grandes volúmenes de datos
 
 ### Posibles Mejoras
 
